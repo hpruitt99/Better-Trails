@@ -8,7 +8,7 @@ one click with the game's own pieces, at their normal prices.
 Open a trail's panel and go to the **Edit** tab. The **Better Trails** section has five tabs:
 
 - **Towers:** everything Auto Trail Lights does. Tower Lights along both edges, evenly spaced so the whole run is lit,
-  as *Uniform* pairs or a *Jagged* zipper, with 8 colors, custom R/G/B and a rainbow *Party* mode. Night skiing is
+  as *Uniform* pairs or a *Jagged* zipper (automatic spacing, or your own spacing or number of lights with a live lit %), with 8 colors, custom R/G/B and a rainbow *Party* mode. Night skiing is
   turned on.
 - **Ropes:** Festoon Lights or Hanging Lanterns, piece after piece, along both edges, zigzagging diagonally across
   the trail, or both. Same colors and Party mode. They skip ground steeper than 20° so the game doesn't flatten it.
@@ -32,7 +32,7 @@ Also:
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
 2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails, and your lights carry over.
    Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
-   - To install by hand instead, download `BetterTrails-2.0.0.zip` from the
+   - To install by hand instead, download `BetterTrails-2.1.0.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
      [`AutoTrailLights`](AutoTrailLights) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
      **Mods → Installed**. It replaces the old Auto Trail Lights folder.

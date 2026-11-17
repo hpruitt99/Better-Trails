@@ -17,6 +17,10 @@ replaces the old pieces in one go.
 - **Tower lights**: the game's Tower Light along both edges, spaced so the whole trail is lit, and Night skiing
   turned on.
   - **Uniform** pairs face each other across the trail. **Jagged** is a zipper: each light faces a gap.
+  - **Auto spacing** picks the widest spacing that still lights the whole trail. **Custom** shows two sliders:
+    **Spacing** (10 to 200 m between lights) and **Lights** (how many in all); moving one moves the other. Uniform or
+    Jagged still decides how they sit on the two edges. The note shows how much of the trail these lights will light,
+    and turns orange below 100% so you can space them closer.
   - **Light color** appears once the trail has lights: 8 swatches, **Custom color** (R/G/B sliders), and **Party**,
     a rainbow that chases down the trail. Color changes are free.
 - **Rope lights**: the game's Festoon Lights or Hanging Lanterns, piece after piece.

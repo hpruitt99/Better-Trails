@@ -24,7 +24,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "2.0.0"
+M.VERSION = "2.1.0"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {
@@ -40,6 +40,8 @@ local CFG = {
   OCCUPIED        = 800,     -- cm: a spot that already has a building this close is skipped
   MAX_EDGE_SEARCH = 20000,   -- cm: widest half-width looked for
   MAX_TOWERS      = 120,     -- per trail
+  CUSTOM_MIN_SPACING = 1000, -- cm: the Custom spacing slider's range (10 to 200 m)
+  CUSTOM_MAX_SPACING = 20000,
   MAX_SAMPLES     = 3000,    -- trail points checked for light / snow
   CLEAR_RADIUS    = 400,     -- cm of trees cleared under something placed in the woods (charged like the game does)
   ENABLE_NIGHT    = true,    -- switch the trail's night skiing on after lighting it with towers
@@ -995,8 +997,8 @@ local function evenSpacing(ctx)
   return ctx.spacing
 end
 
-local function planEven(ctx, style)
-  local best = { spacing = evenSpacing(ctx) }
+local function planEven(ctx, style, wanted)
+  local best = { spacing = wanted or evenSpacing(ctx) }
   best.list = pattern(ctx, best.spacing, style)
   -- the even spacing actually used (each segment is split into equal parts no longer than `spacing`)
   local total, parts = 0, 0
@@ -1008,9 +1010,22 @@ local function planEven(ctx, style)
 end
 
 -- { style, towers = {spots}, removeCount, refund, cost (each), net, same (already installed like this) }
-function M.plan(ctx, style)
+-- the spacing (cm) at which a style puts about n lights on this trail: the widest one with at least n
+function M.spacingForCount(ctx, style, n)
+  local lo, hi = CFG.CUSTOM_MIN_SPACING, CFG.CUSTOM_MAX_SPACING
+  if #pattern(ctx, hi, style) >= n then return hi end
+  for _ = 1, 18 do
+    local mid = (lo + hi) / 2
+    if #pattern(ctx, mid, style) >= n then lo = mid else hi = mid end
+  end
+  return math.floor(lo)
+end
+
+-- spacing: nil for the automatic one (the widest that lights the whole trail), or cm picked by the player
+function M.plan(ctx, style, spacingWanted)
   if style ~= "jagged" then style = "uniform" end
-  local towers, spacing = planEven(ctx, style)
+  local towers, spacing = planEven(ctx, style, spacingWanted)
+  local capped = #towers > CFG.MAX_TOWERS
   while #towers > CFG.MAX_TOWERS do table.remove(towers) end
   local cost = kindCost("tower")
   local refund = 0
@@ -1034,7 +1049,7 @@ function M.plan(ctx, style)
   end
   local lit = coverage(ctx.samples, towers, ctx.reach)
   return { style = style, ctx = ctx, towers = towers, spacing = spacing, cost = cost, removeCount = #ctx.ours,
-           refund = refund, net = cost * #towers - refund, same = same,
+           refund = refund, net = cost * #towers - refund, same = same, capped = capped, custom = spacingWanted ~= nil,
            dark = ctx.reachable < #ctx.samples or lit < ctx.reachable * 0.98 }
 end
 
@@ -1540,7 +1555,9 @@ end
 
 -- How much of the trail a light reaches, the way the game counts it: every light area (an AoE effect of kind Light)
 -- in the resort's PlaceableRegistrySubsystem.AoESources. If those can't be read: the known light pieces.
-local function litShare(b)
+-- skip: actors (by full name) whose lights don't count (lights about to be replaced); extra: { x, y, r } lights to
+-- add (planned ones). Without them: the trail as it is now.
+local function litShare(b, skip, extra)
   if #b.samples == 0 then return nil end
   local r = b.r
   local lights = {}
@@ -1550,6 +1567,10 @@ local function litShare(b)
       local c = arr[i]
       if valid(c) then
         local ok, kind = pcall(function() return c.EffectKind end)
+        if ok and kind == CFG.LIGHT_KIND and skip then
+          local okk, owner = pcall(function() return c:GetOwner():GetFullName() end)
+          if okk and skip[owner] then ok = false end
+        end
         if ok and kind == CFG.LIGHT_KIND then
           local l = c:K2_GetComponentLocation()
           local rad = c.EffectRadius
@@ -1562,11 +1583,14 @@ local function litShare(b)
     local radius = { tower = lightRadius(), festoon = KINDS.festoon.light, lantern = KINDS.lantern.light }
     for k, rad in pairs(radius) do
       for _, a in ipairs(inWorld(KINDS[k].short)) do
-        local l = a:K2_GetActorLocation()
-        lights[#lights + 1] = { x = l.X, y = l.Y, r = rad }
+        if not (skip and skip[a:GetFullName()]) then
+          local l = a:K2_GetActorLocation()
+          lights[#lights + 1] = { x = l.X, y = l.Y, r = rad }
+        end
       end
     end
   end
+  for _, l in ipairs(extra or {}) do lights[#lights + 1] = l end
   if #lights == 0 then return 0 end
   local size = 0
   for _, l in ipairs(lights) do if l.r > size then size = l.r end end
@@ -2201,6 +2225,19 @@ local function optsFor(f, t)
   return o
 end
 
+-- per trail: { custom = true/false, spacing = cm } (this session)
+P.towerOpts = P.towerOpts or {}
+local function towerOpts(t)
+  local o = P.towerOpts[t.id]
+  if not o then o = { custom = false }; P.towerOpts[t.id] = o end
+  return o
+end
+local SP_MIN, SP_MAX = CFG.CUSTOM_MIN_SPACING, CFG.CUSTOM_MAX_SPACING
+local function spacingToSlider(cm) return math.max(0, math.min(1, (cm - SP_MIN) / (SP_MAX - SP_MIN))) end
+local function sliderToSpacing(v) return SP_MIN + v * (SP_MAX - SP_MIN) end
+local function countToSlider(n) return math.max(0, math.min(1, (n - 2) / (CFG.MAX_TOWERS - 2))) end
+local function sliderToCount(v) return math.floor(2 + v * (CFG.MAX_TOWERS - 2) + 0.5) end
+
 -- the tower lights tab (Auto Trail Lights' section)
 local function buildTowerTab(tree, box)
   local styles = newRow(tree, box)
@@ -2211,6 +2248,24 @@ local function buildTowerTab(tree, box)
       refreshTab()
     end)
   end
+  -- spacing: the automatic one, or a custom one set by spacing or by number of lights
+  local modes = newRow(tree, box)
+  P.autoBtn = newButton(tree, modes, "Auto spacing", 1, function()
+    if P.trail then towerOpts(P.trail).custom = false end
+    refreshTab()
+  end)
+  P.customSpacingBtn = newButton(tree, modes, "Custom", 1, function()
+    if P.trail then
+      local o = towerOpts(P.trail)
+      o.custom = true
+      o.spacing = o.spacing or (P.plan and P.plan.spacing) or 4000
+    end
+    refreshTab()
+  end)
+  P.customBox = newWidget(tree, "VerticalBox")
+  box:AddChildToVerticalBox(P.customBox):SetPadding({ Left = 0, Top = 0, Right = 0, Bottom = 3 })
+  P.spacingSlider = newSlider(tree, P.customBox, "Spacing")
+  P.countSlider = newSlider(tree, P.customBox, "Lights")
   local actions = newRow(tree, box)
   P.main = newButton(tree, actions, "Install trail lights", 3, function()
     if not P.plan then return end
@@ -2420,8 +2475,26 @@ local function towerRefresh()
   local ctx = P.ctx
   local style = P.styleOf[t.id] or "uniform"
   for _, st in ipairs(STYLES) do setButton(P.styleButtons[st], nil, st == style and C.on or C.off, true) end
-  local p = M.plan(ctx, style)
+  local o = towerOpts(t)
+  setButton(P.autoBtn, nil, o.custom and C.off or C.on, true)
+  setButton(P.customSpacingBtn, nil, o.custom and C.on or C.off, true)
+  P.customBox:SetVisibility(o.custom and 0 or 1)
+  local p = M.plan(ctx, style, o.custom and o.spacing or nil)
   P.plan = p
+  if o.custom and not P.towerSlideAt then         -- the sliders show the plan
+    P.spacingSlider.w:SetValue(spacingToSlider(p.spacing or o.spacing))
+    P.spacingSlider.last = P.spacingSlider.w:GetValue()
+    P.spacingSlider.val:SetText(FText(string.format("%d m", math.floor((p.spacing or o.spacing) / 100 + 0.5))))
+    P.countSlider.w:SetValue(countToSlider(#p.towers))
+    P.countSlider.last = P.countSlider.w:GetValue()
+    P.countSlider.val:SetText(FText(tostring(#p.towers)))
+  end
+  -- how lit the trail will be with these lights (the trail's own lights now replaced by the planned ones)
+  local skip, planned = {}, {}
+  for _, a in ipairs(ctx.ours) do pcall(function() skip[a:GetFullName()] = true end) end
+  for _, sp in ipairs(p.towers) do planned[#planned + 1] = { x = sp.x, y = sp.y, r = ctx.radius } end
+  local okL, after = pcall(litShare, P.base, skip, planned)
+  p.litAfter = okL and after or nil
   local n = #p.towers
   P.removeBtn.w:SetVisibility(p.removeCount > 0 and 0 or 1)
   setButton(P.removeBtn, "Remove", C.red, p.removeCount > 0)
@@ -2430,7 +2503,7 @@ local function towerRefresh()
   local back = sellBack(p.removeCount, p.refund)
   if p.same then
     setButton(P.main, "Installed (" .. STYLE_LABEL[style] .. ")", C.off, false)
-    setNote(P.note, each .. spacing .. ". Pick another style to change them." .. (t.night and "" or " Night skiing is off above.") .. back, C.ok)
+    setNote(P.note, each .. spacing .. ". Pick another style or spacing to change them." .. (t.night and "" or " Night skiing is off above.") .. back, C.ok)
   elseif n == 0 then
     setButton(P.main, "Install trail lights", C.off, false)
     setNote(P.note, "No room for lights along this trail's edges." .. back, C.warn)
@@ -2444,7 +2517,14 @@ local function towerRefresh()
       CFG.ENABLE_NIGHT and " and turns Night skiing on" or ""))
   end
   if P.msg then setNote(P.note, P.msg, C.warn); P.msg = nil end
-  if p.dark and n > 0 then P.note:SetText(FText(P.note:GetText():ToString() .. " Parts too far from the edges stay dark.")) end
+  if p.capped then P.note:SetText(FText(P.note:GetText():ToString() .. string.format(" That's the most per trail (%d).", CFG.MAX_TOWERS))) end
+  if p.dark and n > 0 and not p.custom then P.note:SetText(FText(P.note:GetText():ToString() .. " Parts too far from the edges stay dark.")) end
+  if p.litAfter and not p.same and n > 0 then      -- what these lights will light, so a custom layout isn't too thin
+    local pct = math.floor(p.litAfter * 100 + 0.5)
+    P.note:SetText(FText(P.note:GetText():ToString() .. string.format(" With these lights: %d%% lit.", pct)
+      .. ((p.litAfter < 0.995 and p.custom) and " Space them closer to reach 100%." or "")))
+    if p.litAfter < 0.995 and p.custom then P.note:SetColorAndOpacity({ SpecifiedColor = C.warn, ColorUseRule = 0 }) end
+  end
   P.note:SetText(FText(P.note:GetText():ToString() .. litNote()))
   refreshColorBox(P.towerCB, ctx.ours)
 end
@@ -2610,14 +2690,52 @@ local function pollRangeSliders(U)
   end
 end
 
+-- the Custom spacing / Lights sliders: either one moves the other while dragging; let go, the lights are re-planned
+local function pollTowerSliders()
+  if not (P.trail and P.ctx and P.spacingSlider) then return end
+  local o = towerOpts(P.trail)
+  if not o.custom then return end
+  local style = P.styleOf[P.trail.id] or "uniform"
+  local moved
+  for _, which in ipairs({ "spacing", "count" }) do
+    local sl = which == "spacing" and P.spacingSlider or P.countSlider
+    local v = sl.w:GetValue()
+    if sl.last == nil then sl.last = v end
+    if math.abs(v - sl.last) > 0.001 then sl.last = v; moved = which end
+  end
+  if moved then
+    P.towerSlideAt, P.towerSlideWhich = frame, moved
+    if moved == "spacing" then
+      local cm = sliderToSpacing(P.spacingSlider.last)
+      P.towerSlideSpacing = cm
+      P.spacingSlider.val:SetText(FText(string.format("%d m", math.floor(cm / 100 + 0.5))))
+      local n = math.min(#pattern(P.ctx, cm, style), CFG.MAX_TOWERS)
+      P.countSlider.w:SetValue(countToSlider(n)); P.countSlider.last = P.countSlider.w:GetValue()
+      P.countSlider.val:SetText(FText(tostring(n)))
+    else
+      local n = sliderToCount(P.countSlider.last)
+      local cm = M.spacingForCount(P.ctx, style, n)
+      P.towerSlideSpacing = cm
+      P.countSlider.val:SetText(FText(tostring(n)))
+      P.spacingSlider.w:SetValue(spacingToSlider(cm)); P.spacingSlider.last = P.spacingSlider.w:GetValue()
+      P.spacingSlider.val:SetText(FText(string.format("%d m", math.floor(cm / 100 + 0.5))))
+    end
+  end
+  if P.towerSlideAt and frame - P.towerSlideAt > 20 then
+    P.towerSlideAt = nil
+    o.spacing = P.towerSlideSpacing or o.spacing
+    refreshTab()
+  end
+end
+
 local function pollSliders()
-  if P.tab == "tower" then pollColorSliders(P.towerCB)
+  if P.tab == "tower" then pollColorSliders(P.towerCB); pollTowerSliders()
   elseif P.tab == "rope" then pollColorSliders(P.F.rope.cb)
   elseif P.tab == "snow" then pollRangeSliders(P.F.snow) end
 end
 
 local function sliding()
-  return (P.towerCB and P.towerCB.slideAt) or (P.F and P.F.rope and P.F.rope.cb and P.F.rope.cb.slideAt)
+  return P.towerSlideAt or (P.towerCB and P.towerCB.slideAt) or (P.F and P.F.rope and P.F.rope.cb and P.F.rope.cb.slideAt)
 end
 
 function M.poll()                                  -- every frame: a click lasts one frame
