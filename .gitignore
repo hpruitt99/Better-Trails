@@ -1,0 +1,8 @@
+# build output
+*.zip
+# never commit game files or extracted assets
+*.pak
+*.ucas
+*.utoc
+*.uasset
+*.uexp
