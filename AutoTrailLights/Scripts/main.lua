@@ -24,7 +24,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "2.1.0"
+M.VERSION = "2.2.0"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {
@@ -1567,9 +1567,9 @@ local function litShare(b, skip, extra)
       local c = arr[i]
       if valid(c) then
         local ok, kind = pcall(function() return c.EffectKind end)
-        if ok and kind == CFG.LIGHT_KIND and skip then
+        if ok and kind == CFG.LIGHT_KIND and (skip or next(M.ghostSet or {})) then
           local okk, owner = pcall(function() return c:GetOwner():GetFullName() end)
-          if okk and skip[owner] then ok = false end
+          if okk and ((skip and skip[owner]) or (M.ghostSet and M.ghostSet[owner])) then ok = false end
         end
         if ok and kind == CFG.LIGHT_KIND then
           local l = c:K2_GetComponentLocation()
@@ -1796,6 +1796,7 @@ function M.apply(p)
   if valid(r.eco) and p.net > 0 and not r.eco:CanAfford(p.net) then
     return "Not enough money: " .. money(p.net) .. " needed."
   end
+  M.clearGhosts()
   local trail = p.ctx.trail
   local hex = lightsHex(p.ctx.ours)                -- a new style keeps the trail's color
   local tag = hexTag(hex)
@@ -1872,6 +1873,80 @@ function M.removeAll(trail)
   for _, l in pairs(M.everything(trail)) do for _, a in ipairs(l) do list[#list + 1] = a end end
   startJob({ what = "all", label = "everything", trail = trail, world = r.world, remove = list, items = {} })
   return nil
+end
+
+-- Preview of a custom tower layout: Tower Lights spawned in the game's own preview mode (bIsPreview, then
+-- SetPreviewMode: the see-through look of the build menu's ghost), which the game doesn't register, charge or save.
+-- A few a frame. If the first one ever turns up among the resort's buildings, previews are switched off for good.
+M.ghosts = M.ghosts or {}
+M.ghostSet = M.ghostSet or {}
+function M.clearGhosts()
+  for _, a in ipairs(M.ghosts) do
+    if valid(a) then pcall(function() a:K2_DestroyActor() end) end
+  end
+  M.ghosts, M.ghostSet, M.ghostQueue, M.ghostKey = {}, {}, nil, nil
+end
+
+-- spots: the planned towers; key: what they are (so the same plan isn't shown twice)
+function M.showGhosts(spots, key)
+  if M.noGhosts or key == M.ghostKey then return end
+  M.clearGhosts()
+  M.ghostKey = key
+  M.ghostQueue = { spots = spots, i = 1 }
+end
+
+local function isBuilding(r, a)
+  local found = false
+  pcall(function()
+    local addr = a:GetAddress()
+    local arr = r.reg.Buildings
+    for i = 1, #arr do
+      local b = arr[i]
+      if b and b:GetAddress() == addr then found = true; break end
+    end
+  end)
+  return found
+end
+
+function M.stepGhosts()
+  local q = M.ghostQueue
+  if not q then return end
+  local r = refs()
+  if not ready(r) then M.ghostQueue = nil return end
+  local cls = q.cls
+  if not valid(cls) then
+    local c, why = loadStep(r, q, "tower")
+    if c == false then log("preview: " .. tostring(why)); M.ghostQueue = nil; return end
+    if not c then return end
+    cls = c
+    q.cls = c
+  end
+  for _ = 1, 8 do
+    local sp = q.spots[q.i]
+    if not sp then M.ghostQueue = nil; return end
+    q.i = q.i + 1
+    local z = r.TU:GetHeightAtLocation(r.world, { X = sp.x, Y = sp.y })
+    local h = math.rad(sp.yaw) / 2
+    local xf = { Rotation = { X = 0, Y = 0, Z = math.sin(h), W = math.cos(h) }, Translation = { X = sp.x, Y = sp.y, Z = z },
+                 Scale3D = { X = 1, Y = 1, Z = 1 } }
+    local a = r.GS:BeginDeferredActorSpawnFromClass(r.world, cls, xf, 1, nil, 0)
+    if valid(a) then
+      pcall(function() a.bIsPreview = true end)
+      a = r.GS:FinishSpawningActor(a, xf, 0)
+    end
+    if valid(a) then
+      pcall(function() a:K2_SetActorRotation({ Pitch = 0, Yaw = sp.yaw, Roll = 0 }, false) end)
+      pcall(function() a:SetPreviewMode(true, true) end)
+      M.ghosts[#M.ghosts + 1] = a
+      pcall(function() M.ghostSet[a:GetFullName()] = true end)
+      if #M.ghosts == 1 and isBuilding(r, a) then   -- the game took it for a real one: no previews
+        log("preview towers count as buildings here: previews off")
+        M.noGhosts = true
+        M.clearGhosts()
+        return
+      end
+    end
+  end
 end
 
 function M.removeFeature(f, trail)
@@ -2495,6 +2570,14 @@ local function towerRefresh()
   for _, sp in ipairs(p.towers) do planned[#planned + 1] = { x = sp.x, y = sp.y, r = ctx.radius } end
   local okL, after = pcall(litShare, P.base, skip, planned)
   p.litAfter = okL and after or nil
+  -- custom layouts get a preview: see-through towers where the lights will go
+  if o.custom and not p.same and #p.towers > 0 and not M.noGhosts then
+    local first = p.towers[1]
+    M.showGhosts(p.towers, string.format("%d:%s:%d:%.0f:%.0f", t.id, style, #p.towers, first.x, first.y))
+    p.ghosts = true
+  else
+    M.clearGhosts()
+  end
   local n = #p.towers
   P.removeBtn.w:SetVisibility(p.removeCount > 0 and 0 or 1)
   setButton(P.removeBtn, "Remove", C.red, p.removeCount > 0)
@@ -2522,7 +2605,8 @@ local function towerRefresh()
   if p.litAfter and not p.same and n > 0 then      -- what these lights will light, so a custom layout isn't too thin
     local pct = math.floor(p.litAfter * 100 + 0.5)
     P.note:SetText(FText(P.note:GetText():ToString() .. string.format(" With these lights: %d%% lit.", pct)
-      .. ((p.litAfter < 0.995 and p.custom) and " Space them closer to reach 100%." or "")))
+      .. ((p.litAfter < 0.995 and p.custom) and " Space them closer to reach 100%." or "")
+      .. (p.ghosts and " The see-through towers show where they'll go." or "")))
     if p.litAfter < 0.995 and p.custom then P.note:SetColorAndOpacity({ SpecifiedColor = C.warn, ColorUseRule = 0 }) end
   end
   P.note:SetText(FText(P.note:GetText():ToString() .. litNote()))
@@ -2637,8 +2721,8 @@ refreshTab = function()
     P.boxes[key]:SetVisibility(key == P.tab and 0 or 1)
     setButton(P.tabButtons[key], nil, key == P.tab and C.on or C.off, true)
   end
-  if not (P.base and P.trail) then return end
-  if P.tab == "tower" then towerRefresh() else featureRefresh(P.F[P.tab]) end
+  if not (P.base and P.trail) then M.clearGhosts() return end
+  if P.tab == "tower" then towerRefresh() else M.clearGhosts(); featureRefresh(P.F[P.tab]) end
 end
 
 -- remeasure = true: the trail changed (or another one is shown)
@@ -2744,6 +2828,9 @@ function M.poll()                                  -- every frame: a click lasts
   if M.job then
     local ok, err = pcall(M.stepJob)
     if not ok then log("job: " .. tostring(err)); M.job = nil; P.key = nil end
+  elseif M.ghostQueue then
+    local ok, err = pcall(M.stepGhosts)
+    if not ok then log("preview: " .. tostring(err)); M.ghostQueue = nil end
   end
   local okp, perr = pcall(M.partyStep)
   if not okp and frame % 600 == 0 then log("party: " .. tostring(perr)) end
@@ -2813,7 +2900,11 @@ function M.background()                            -- 4 times a second
     if not inject(cand) then M.newPanel = cand; return end   -- not built yet: next time
     w = cand
   end
-  if not panelShown(w) then P.key = nil; return end
+  if not panelShown(w) then
+    P.key = nil
+    if #M.ghosts > 0 or M.ghostQueue then M.clearGhosts() end
+    return
+  end
   if M.job then return end                         -- re-plan once it's done
   local key = ""
   pcall(function() key = w.TrailNameLabel:GetText():ToString() .. "|" .. w.LengthLabel:GetText():ToString() end)
@@ -2859,6 +2950,7 @@ if ModRef then
   pcall(function()
     ModRef.OnUnload = function()
       M.stopped = true
+      pcall(M.clearGhosts)
       if M.job then log("switched off mid-job: stopped there"); M.job = nil end
       pcall(function()
         local root = M.P and M.P.root

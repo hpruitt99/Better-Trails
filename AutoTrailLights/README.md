@@ -21,6 +21,8 @@ replaces the old pieces in one go.
     **Spacing** (10 to 200 m between lights) and **Lights** (how many in all); moving one moves the other. Uniform or
     Jagged still decides how they sit on the two edges. The note shows how much of the trail these lights will light,
     and turns orange below 100% so you can space them closer.
+  - With **Custom**, see-through towers (the game's own placement preview) show where the lights will go before you
+    buy them. They're free and disappear when you install, switch to Auto, or close the panel.
   - **Light color** appears once the trail has lights: 8 swatches, **Custom color** (R/G/B sliders), and **Party**,
     a rainbow that chases down the trail. Color changes are free.
 - **Rope lights**: the game's Festoon Lights or Hanging Lanterns, piece after piece.
