@@ -23,7 +23,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "1.1.1"
+M.VERSION = "2.0.0"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {

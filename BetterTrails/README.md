@@ -4,8 +4,8 @@
 [Z's Mod Loader](https://mods.bigz.studio/), that dresses a whole trail in one click: tower lights, rope lights,
 snowblowers, difficulty signs and flags, all made of the game's own pieces at their normal prices.
 
-Better Trails does everything Auto Trail Lights does, and more. If you have Auto Trail Lights, turn it off: Better
-Trails takes over the lights it placed.
+Better Trails is Auto Trail Lights 2.0: it does everything Auto Trail Lights does, and more. It comes as an update to
+Auto Trail Lights in the Mod Manager, and the lights you placed with Auto Trail Lights carry over.
 
 ## What it does
 
@@ -55,11 +55,11 @@ building, so you can still select, move or bulldoze pieces one by one.
 ## Install
 
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
-2. Under **Discover**, find **Better Trails** and install it. It's listed once the release is approved.
+2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails. Otherwise, find **Auto Trail Lights**
+   under **Discover** and install it. The update is listed once the release is approved.
    - To install by hand instead, copy the `BetterTrails` folder into the game's `mods` folder (`skieogame\mods\`),
-     then turn it on under **Mods → Installed**.
-3. If **Auto Trail Lights** is installed, turn it off under **Mods → Installed**.
-4. Start the game.
+     turn it on under **Mods → Installed**, and turn the old **Auto Trail Lights** off if it's there.
+3. Start the game.
 
 The Mod Manager can switch the mod off and on while the game is running. Pieces you've already placed stay.
 

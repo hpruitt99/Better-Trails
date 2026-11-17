@@ -1,6 +1,7 @@
 # Better Trails
 
-**The new and improved [Auto Trail Lights](https://github.com/hpruitt99/Auto-Trail-Lights).** A mod for
+**The new and improved [Auto Trail Lights](https://github.com/hpruitt99/Auto-Trail-Lights)**: Better Trails is
+Auto Trail Lights 2.0. A mod for
 **Ski-E-O! Ski Resort Tycoon**, made for [Z's Mod Loader](https://mods.bigz.studio/), that dresses a whole trail in
 one click with the game's own pieces, at their normal prices.
 
@@ -29,13 +30,14 @@ Also:
 ## Install
 
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
-2. Under **Discover**, find **Better Trails** and install it. It's listed once the release is approved.
-   - To install by hand instead, download `BetterTrails-1.1.1.zip` from the
+2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails, and your lights carry over.
+   Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
+   - To install by hand instead, download `BetterTrails-2.0.0.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
      [`BetterTrails`](BetterTrails) folder into the game's `mods` folder (`skieogame\mods\`), then turn it on under
      **Mods → Installed**.
-3. If **Auto Trail Lights** is installed, turn it off under **Mods → Installed**.
-4. Start the game.
+   Turn the old **Auto Trail Lights** off if it's there.
+3. Start the game.
 
 The Mod Manager can switch the mod off and on while the game is running. Pieces you've already placed stay.
 
@@ -59,7 +61,7 @@ The script is all in [`BetterTrails/Scripts/main.lua`](BetterTrails/Scripts/main
 ## Compatibility
 
 - Tested with game build CL7918 on Z's Mod Loader 1.3.
-- Replaces Auto Trail Lights: switch that one off.
+- Auto Trail Lights 2.0: replaces the old version (same mod Id, `auto-trail-lights`).
 - Single-player game; the mod contains no game files.
 
 ## Credits
