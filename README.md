@@ -34,17 +34,17 @@ Also:
    Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
    - To install by hand instead, download `BetterTrails-2.0.0.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
-     [`BetterTrails`](BetterTrails) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
-     **Mods → Installed**, and turn the old **Auto Trail Lights** off if it's there.
+     [`AutoTrailLights`](AutoTrailLights) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
+     **Mods → Installed**. It replaces the old Auto Trail Lights folder.
 3. Start the game.
 
 The Mod Manager can switch the mod off and on while the game is running. Pieces you've already placed stay.
 
-The mod folder's own [README](BetterTrails/README.md) has the details on each tab, and its limits.
+The mod folder's own [README](AutoTrailLights/README.md) has the details on each tab, and its limits.
 
 ## How it works
 
-The script is all in [`BetterTrails/Scripts/main.lua`](BetterTrails/Scripts/main.lua):
+The script is all in [`AutoTrailLights/Scripts/main.lua`](AutoTrailLights/Scripts/main.lua):
 
 - **Trail shape:** read from `TrailMapSubsystem.RegisteredTrails` (curves plus corridor width). The game's own
   `IsPositionInCorridor` finds the edges, and other trails' corridors give the junctions.
@@ -60,7 +60,7 @@ The script is all in [`BetterTrails/Scripts/main.lua`](BetterTrails/Scripts/main
 ## Compatibility
 
 - Tested with game build CL7918 on Z's Mod Loader 1.3.
-- Auto Trail Lights 2.0: replaces the old version (same mod Id, `auto-trail-lights`).
+- Auto Trail Lights 2.0: replaces the old version (same mod Id `auto-trail-lights` and folder `AutoTrailLights`).
 - Single-player game; the mod contains no game files.
 
 ## Credits

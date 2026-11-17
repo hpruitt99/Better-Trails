@@ -57,8 +57,8 @@ building, so you can still select, move or bulldoze pieces one by one.
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
 2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails. Otherwise, find **Auto Trail Lights**
    under **Discover** and install it. The update is listed once the release is approved.
-   - To install by hand instead, copy the `BetterTrails` folder into the game's `mods` folder (`skieogame\mods\`),
-     turn it on under **Mods → Installed**, and turn the old **Auto Trail Lights** off if it's there.
+   - To install by hand instead, copy the `AutoTrailLights` folder from the zip into the game's `mods` folder
+     (`skieogame\mods\`), replacing the old one, then turn it on under **Mods → Installed**.
 3. Start the game.
 
 The Mod Manager can switch the mod off and on while the game is running. Pieces you've already placed stay.

@@ -1,7 +1,8 @@
--- Better Trails for Ski-E-O! Ski Resort Tycoon (UE4SS Lua mod)
+-- Better Trails for Ski-E-O! Ski Resort Tycoon (UE4SS Lua mod), the new and improved Auto Trail Lights: it ships as
+-- Auto Trail Lights 2.0 (mod Id auto-trail-lights, folder AutoTrailLights).
 -- Adds a "Better Trails" section to a trail's panel (Edit tab) that dresses the whole trail in one click, with the
 -- game's own placeables, charged at their normal price and sold back with a refund:
---   Tower lights  everything Auto Trail Lights 1.1.1 does: Tower Lights along both edges (Uniform pairs or a Jagged
+--   Tower lights  everything Auto Trail Lights 1.x does: Tower Lights along both edges (Uniform pairs or a Jagged
 --                 zipper), evenly spaced so the trail is lit, night skiing turned on, colors and a rainbow Party mode
 --   Rope lights   Festoon Lights or Hanging Lanterns, piece after piece: along both edges, zigzagging diagonally
 --                 across the trail, or both
@@ -2007,12 +2008,6 @@ P.opts = P.opts or {}                              -- feature -> trail id -> its
 P.signStyle = P.signStyle or 0                     -- 0: follow the game; 1-4: a sign style picked in the panel
 P.tab = P.tab or "tower"
 
--- Auto Trail Lights running too? (it sets this shared variable; Better Trails includes everything it does)
-local function atlRunning()
-  local ok, v = pcall(function() return ModRef:GetSharedVariable("SkiEOMods.enabled.AutoTrailLights") end)
-  return ok and v == true
-end
-
 local function newWidget(tree, cn) return StaticConstructObject(StaticFindObject("/Script/UMG." .. cn), tree) end
 -- Text in the game's own UI font: the panel's labels use the game's default font (no font object set), so the mod
 -- copies one of them (P.fontSrc) and only changes the size. Without one, the engine's Roboto.
@@ -2296,10 +2291,6 @@ local function inject(w)
       refreshTab()
     end, SIZE.tab)
   end
-  P.atlNote = newText(tree, "Auto Trail Lights is on too, so its own section handles tower lights here. Better "
-    .. "Trails includes it: switch Auto Trail Lights off in the Mods menu to use the Tower lights tab.", SIZE.note, C.warn, false)
-  P.atlNote:SetAutoWrapText(true)
-  root:AddChildToVerticalBox(P.atlNote):SetPadding({ Left = 2, Top = 0, Right = 2, Bottom = 4 })
 
   P.boxes = {}
   for _, key in ipairs(TABS) do
@@ -2562,10 +2553,6 @@ end
 
 -- shows the picked tab and plans what it would do
 refreshTab = function()
-  P.atl = atlRunning()
-  if P.atl and P.tab == "tower" then P.tab = "rope" end
-  P.tabButtons.tower.w:SetVisibility(P.atl and 1 or 0)
-  P.atlNote:SetVisibility(P.atl and 0 or 1)
   for _, key in ipairs(TABS) do
     P.boxes[key]:SetVisibility(key == P.tab and 0 or 1)
     setButton(P.tabButtons[key], nil, key == P.tab and C.on or C.off, true)
@@ -2676,10 +2663,10 @@ function M.background()                            -- 4 times a second
   if M.stopped then return end
   bgTick = bgTick + 1
   if bgTick % 20 == 0 and not sliding() then       -- every 5 s (not mid-drag): saved colors back on lights
-    local ok, err = pcall(M.repaintAll, P.atl)      -- (tower lights are Auto Trail Lights' when it runs)
+    local ok, err = pcall(M.repaintAll)
     if not ok then log("repaint: " .. tostring(err)) end
   end
-  if not P.atl then
+  do
     local r = refs()
     if valid(r.world) and bgTick % 20 == 10 and not M.job and M.cleanedWorld ~= addressOf(r.world) then
       M.cleanedWorld = addressOf(r.world)          -- once per loaded resort
@@ -2726,8 +2713,6 @@ function M.background()                            -- 4 times a second
     local t = M.trailById(P.trail.id)
     if (t and t.diff ~= P.trail.diff) or signStyle() ~= P.lastStyle then P.key = nil end
   end
-  -- Auto Trail Lights switched on or off while the panel is open
-  if bgTick % 8 == 4 and atlRunning() ~= P.atl then pcall(refreshTab) end
 end
 
 if not M.started then
@@ -2744,7 +2729,7 @@ end
 -- startup; on unload stop working, take the section out of the panel and clear the flag. Things already placed stay:
 -- they're ordinary buildings, saved with the resort. Without that loader (plain UE4SS) this only sets an unused
 -- shared variable.
-local ENABLED_KEY = "SkiEOMods.enabled.BetterTrails"
+local ENABLED_KEY = "SkiEOMods.enabled.AutoTrailLights"   -- the mod's folder: it ships as Auto Trail Lights 2.0
 local function setEnabledFlag(on)
   if on then pcall(function() ModRef:SetSharedVariable(ENABLED_KEY, true) end) return end
   if not pcall(function() ModRef:SetSharedVariable(ENABLED_KEY, nil) end) then
