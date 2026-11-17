@@ -34,9 +34,8 @@ Also:
    Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
    - To install by hand instead, download `BetterTrails-2.0.0.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
-     [`BetterTrails`](BetterTrails) folder into the game's `mods` folder (`skieogame\mods\`), then turn it on under
-     **Mods → Installed**.
-   Turn the old **Auto Trail Lights** off if it's there.
+     [`BetterTrails`](BetterTrails) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
+     **Mods → Installed**, and turn the old **Auto Trail Lights** off if it's there.
 3. Start the game.
 
 The Mod Manager can switch the mod off and on while the game is running. Pieces you've already placed stay.
