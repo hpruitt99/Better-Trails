@@ -2,15 +2,17 @@
 
 **The new and improved Auto Trail Lights.** A mod for Ski-E-O! Ski Resort Tycoon, made for
 [Z's Mod Loader](https://mods.bigz.studio/), that dresses a whole trail in one click: tower lights, rope lights,
-snowblowers, difficulty signs and flags, all made of the game's own pieces at their normal prices.
+snowblowers, difficulty signs and flags, all made of the game's own pieces at their normal prices. Version 3.0 also
+splits a trail in two and joins trails end to end.
 
-Better Trails is Auto Trail Lights 2.0: it does everything Auto Trail Lights does, and more. It comes as an update to
+Better Trails is Auto Trail Lights 2.0 and up: it does everything Auto Trail Lights does, and more. It comes as an update to
 Auto Trail Lights in the Mod Manager, and the lights you placed with Auto Trail Lights carry over.
 
 ## What it does
 
-Click a trail and open its **Edit** tab. Under the Night skiing switch there's a **Better Trails** section with five
-tabs: **Towers**, **Ropes**, **Snow**, **Signs** and **Flags**. On each tab, pick the options, then click **Install**.
+Click a trail and open its **Edit** tab. Under the Night skiing switch there's a **Better Trails** section with six
+tabs, in two rows: **Towers**, **Ropes**, **Snow**, **Signs**, **Flags** and **Shape**. On the first five, pick the
+options, then click **Install**.
 **Remove** sells that tab's pieces back for a refund. If you pick other options later, the button reads **Switch** and
 replaces the old pieces in one go.
 
@@ -52,6 +54,17 @@ install, switch Preview off, or close the panel.
   - Rate the trail's difficulty first. If you change it later, the tab offers **Update signs**, which is free.
 - **Flags**: the game's Flags along both edges wherever the trail is steeper than 25°, 30° or 35°, every 20 or 40 m.
   If no part is that steep, the tab says how steep the steepest part is.
+- **Shape**: split this trail, or join it with another one. Both are free and use the game's own trail tools, so
+  the trails stay ordinary trails.
+  - **Split**: drag **Split at** (each part keeps at least 30 m), then click **Split here** twice. **Preview** puts
+    two see-through flags across the trail at the cut. The top part keeps the trail's name, settings and stats. The
+    bottom part becomes a new trail, "*Trail* Lower", with the same difficulty, grooming and night skiing. Better
+    Trails pieces on the bottom part go with it.
+  - **Join**: the tab lists up to three trails with an end within 50 m of one of this trail's ends (or twice the
+    trail's width on wide trails, up to 100 m). It doesn't matter which way either trail was drawn. Click
+    **Join "*Trail*"** twice. You get one trail running downhill, with the upper trail's name, difficulty, grooming and
+    night skiing. The two ends become one bend point halfway between them. If the trails are different widths, the
+    curve on each side of the joint tapers so the width changes gradually. Better Trails pieces on both come along.
 - **Lit now**: the Towers and Ropes tabs say how much of the trail is in reach of a light, counting every light in
   the resort the way the game does, including ones you placed by hand.
 - **Remove everything**: under the tabs, a summary of what Better Trails placed on this trail, what it cost, and what
@@ -66,7 +79,7 @@ building, so you can still select, move or bulldoze pieces one by one.
 ## Install
 
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
-2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails. Otherwise, find **Auto Trail Lights**
+2. If you have **Auto Trail Lights**, update it: version 2.0 and up is Better Trails. Otherwise, find **Auto Trail Lights**
    under **Discover** and install it. The update is listed once the release is approved.
    - To install by hand instead, copy the `AutoTrailLights` folder from the zip into the game's `mods` folder
      (`skieogame\mods\`), replacing the old one, then turn it on under **Mods → Installed**.
@@ -92,7 +105,7 @@ The Mod Manager can switch the mod off and on while the game is running. Pieces 
   edge when a spot is taken. Trees under a tower light, a snowblower or an edge string are cleared, and the clearing
   is charged the way the game charges it.
 - Snowblowers are expensive ($6,200 each plus their running cost). The tab shows the total before you click.
-- Tested with game build CL7957 (2026-11-17) on Z's Mod Loader 1.3.
+- Tested with game build CL7957 (2026-11-17, split and join on 2026-11-18) on Z's Mod Loader 1.3.
 
 ## Credits
 
@@ -102,4 +115,4 @@ The Mod Manager can switch the mod off and on while the game is running. Pieces 
 - **Loader:** Z's Mod Loader (https://mods.bigz.studio/).
 - **Idea:** Ski-E-O roadmap requests "Automatic Slope Signs", "Automatic Snowblower for Slopes", "Parametric night
   lights", "Add lights automatically when Night skiing is checked", "Night lighting map overlay and feedback" and
-  "Slope safety signage".
+  "Slope safety signage". Split and join: requested by a player of the mod.

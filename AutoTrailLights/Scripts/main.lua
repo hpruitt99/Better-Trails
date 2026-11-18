@@ -24,7 +24,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "2.3.1"
+M.VERSION = "3.0.0"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {
@@ -1876,6 +1876,331 @@ function M.removeAll(trail)
   return nil
 end
 
+------------------------------------------------------------------------------------------------ split and join
+-- A trail is a chain of quadratic curves (TrailInfo.Curve, then AdditionalCurves), each with a corridor width. The
+-- game's own TrailMapSubsystem does the work: ReplaceTrailGeometry gives a trail a new chain, RegisterTrailFromCurve
+-- makes a new trail, UnregisterTrail removes one. None of them costs anything (the game charges for drawing a trail,
+-- not for these). The trail whose panel is open keeps its id, name, settings and stats.
+local function V3(x, y, z) return { X = x, Y = y, Z = z } end
+local function readChain(tm, id)                   -- full curves (with heights and widths) + the trail's switches
+  local found
+  tm.RegisteredTrails:ForEach(function(k, v)
+    if k:get() ~= id then return end
+    local info = v:get()
+    local function full(c)
+      return { s = V3(c.StartPoint.X, c.StartPoint.Y, c.StartPoint.Z), c = V3(c.ControlPoint.X, c.ControlPoint.Y, c.ControlPoint.Z),
+               e = V3(c.Endpoint.X, c.Endpoint.Y, c.Endpoint.Z), w0 = c.CorridorWidth, w1 = c.EndCorridorWidth }
+    end
+    local t = { id = id, name = info.DisplayName:ToString(), shape = info.Shape, curves = { full(info.Curve) } }
+    local extra = info.AdditionalCurves
+    for i = 1, #extra do t.curves[#t.curves + 1] = full(extra[i]) end
+    pcall(function() t.diff = info.PlayerRatedDifficulty end)
+    pcall(function() t.groomed = info.bIsGroomed end)
+    pcall(function() t.night = info.bNightSkiing end)
+    pcall(function() t.disabled = info.bManuallyDisabled end)
+    found = t
+  end)
+  return found
+end
+M.readChain = readChain
+
+local function toGame(c)                           -- one curve as the game's TrailCurve struct
+  return { StartPoint = c.s, ControlPoint = c.c, Endpoint = c.e, CorridorWidth = c.w0, EndCorridorWidth = c.w1 or 0 }
+end
+local function lerp3(a, b, t) return V3(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t, a.Z + (b.Z - a.Z) * t) end
+local function at3(c, t) return lerp3(lerp3(c.s, c.c, t), lerp3(c.c, c.e, t), t) end
+local function widthAt(c, t)                       -- EndCorridorWidth 0: the same width all along
+  if not c.w1 or c.w1 <= 0 then return c.w0 end
+  return c.w0 + (c.w1 - c.w0) * t
+end
+-- a curve cut in two at t (de Casteljau): the same path, in two pieces
+local function cutCurve(c, t)
+  local q0, q1 = lerp3(c.s, c.c, t), lerp3(c.c, c.e, t)
+  local m = lerp3(q0, q1, t)
+  local wm = widthAt(c, t)
+  local tapered = c.w1 and c.w1 > 0
+  return { s = c.s, c = q0, e = m, w0 = c.w0, w1 = tapered and wm or 0 },
+         { s = m, c = q1, e = c.e, w0 = wm, w1 = tapered and c.w1 or 0 }
+end
+
+local CUT_STEPS = 48
+local function chainLength(chain)                  -- along the ground (x, y), in cm, with the length of each curve
+  local total, each = 0, {}
+  for i, c in ipairs(chain.curves) do
+    local len, prev = 0, c.s
+    for k = 1, CUT_STEPS do
+      local p = at3(c, k / CUT_STEPS)
+      len = len + math.sqrt((p.X - prev.X) ^ 2 + (p.Y - prev.Y) ^ 2)
+      prev = p
+    end
+    each[i] = len
+    total = total + len
+  end
+  return total, each
+end
+
+-- where a cut `d` cm from the top falls: curve index, t on it, the point, the direction, the width there
+local function cutAt(chain, d)
+  local _, each = chainLength(chain)
+  for i, c in ipairs(chain.curves) do
+    if d <= each[i] or i == #chain.curves then
+      local want, len, prev = math.min(d, each[i]), 0, c.s
+      local t = 1
+      for k = 1, CUT_STEPS do
+        local p = at3(c, k / CUT_STEPS)
+        local step = math.sqrt((p.X - prev.X) ^ 2 + (p.Y - prev.Y) ^ 2)
+        if len + step >= want then t = (k - 1 + (step > 0 and (want - len) / step or 0)) / CUT_STEPS; break end
+        len = len + step
+        prev = p
+      end
+      local p = at3(c, t)
+      local q = at3(c, math.min(1, t + 0.01))
+      if t >= 0.99 then local o = at3(c, t - 0.01); q = V3(2 * p.X - o.X, 2 * p.Y - o.Y, 0) end
+      local dx, dy = q.X - p.X, q.Y - p.Y
+      local n = math.sqrt(dx * dx + dy * dy)
+      if n < 1 then dx, dy, n = 1, 0, 1 end
+      return { i = i, t = t, x = p.X, y = p.Y, dx = dx / n, dy = dy / n, w = widthAt(c, t) }
+    end
+    d = d - each[i]
+  end
+end
+M.cutAt = cutAt
+
+-- a name no trail has: "Fox Wander Lower", "Fox Wander Lower 2", ...
+local function freeName(want)
+  local names = trailNames()
+  if not names[want] then return want end
+  for n = 2, 99 do
+    local cand = want .. " " .. n
+    if not names[cand] then return cand end
+  end
+  return want
+end
+
+-- the mod's pieces (towers, ropes, snowblowers, signs, flags) of a trail, each with what its name starts with
+local function piecesOf(trail)
+  local list = {}
+  for key, l in pairs(M.everything(trail)) do
+    local suffix = key == "tower" and CFG.NAME_SUFFIX or FEATURES[key].suffix
+    local pat = "^(.*)" .. (suffix:gsub("#", "%%#")) .. "%d+"
+    for _, a in ipairs(l) do
+      local ok, name = pcall(function() return a.InstanceName:ToString() end)
+      local prefix = ok and name and name:match(pat)
+      if prefix then list[#list + 1] = { a = a, name = name, prefix = prefix } end
+    end
+  end
+  return list
+end
+local function renamePiece(pc, newTrailName)        -- "<old> Rope #4 · Blue" -> "<new> Rope #4 · Blue"
+  if pc.prefix == newTrailName then return end
+  local rest = pc.name:sub(#pc.prefix + 1)
+  pcall(function() pc.a:SetInstanceName(FText(newTrailName .. rest)) end)
+end
+
+local function afterShapeChange(r)
+  pcall(function() r.tm:DetectIntersections() end)
+  for _, o in ipairs(FindAllOf("TrailVisualizationSubsystem") or {}) do
+    if valid(o) then pcall(function() o:RefreshLabels() end) end
+  end
+end
+
+CFG.MIN_PART = CFG.MIN_PART or 3000                -- each part of a split: at least 30 m
+CFG.JOIN_GAP = CFG.JOIN_GAP or 5000                -- ends this close can join: 50 m, or twice the trail's width,
+CFG.JOIN_MAX = CFG.JOIN_MAX or 10000               -- up to 100 m
+
+-- the split plan for `trail` at `d` cm from the top
+function M.planSplit(trail, d)
+  local r = refs()
+  if not valid(r.tm) then return { err = "The resort isn't loaded." } end
+  local chain = readChain(r.tm, trail.id)
+  if not chain then return { err = "Couldn't read this trail." } end
+  if chain.shape == 1 then return { err = "Bowls can't be split." } end
+  local L = chainLength(chain)
+  if L < 2 * CFG.MIN_PART then return { err = "This trail is too short to split (each part needs 30 m).", length = L } end
+  d = math.max(CFG.MIN_PART, math.min(L - CFG.MIN_PART, d or L / 2))
+  local cut = cutAt(chain, d)
+  local p = { chain = chain, length = L, d = d, cut = cut, lowerName = freeName(chain.name .. " Lower") }
+  -- the two see-through flags that mark the cut, one on each edge
+  local half = math.max(300, (cut.w or 2500) / 2 - 150)
+  local nx, ny = -cut.dy, cut.dx
+  local yaw = math.deg(math.atan(cut.dy, cut.dx))
+  p.marks = { { k = "flag", x = cut.x + nx * half, y = cut.y + ny * half, yaw = yaw },
+              { k = "flag", x = cut.x - nx * half, y = cut.y - ny * half, yaw = yaw } }
+  return p
+end
+
+function M.split(p)
+  if M.job then return "Still busy with the last change." end
+  local r = refs(true)
+  if not ready(r) then return "The resort isn't loaded." end
+  local chain = readChain(r.tm, p.chain.id)        -- read again: the trail may have changed since
+  if not chain or #chain.curves ~= #p.chain.curves then return "The trail changed: try again." end
+  local cut = cutAt(chain, p.d)
+  local upper, lower = {}, {}
+  for i, c in ipairs(chain.curves) do
+    if i < cut.i then upper[#upper + 1] = c
+    elseif i > cut.i then lower[#lower + 1] = c
+    else
+      if cut.t <= 0.001 then lower[#lower + 1] = c
+      elseif cut.t >= 0.999 then upper[#upper + 1] = c
+      else
+        local a, b = cutCurve(c, cut.t)
+        upper[#upper + 1] = a
+        lower[#lower + 1] = b
+      end
+    end
+  end
+  if #upper == 0 or #lower == 0 then return "Pick a spot further from the ends." end
+  local pieces = piecesOf(M.trailById(chain.id) or { id = chain.id, name = chain.name })
+  local function rest(list)
+    local out = {}
+    for i = 2, #list do out[#out + 1] = toGame(list[i]) end
+    return out
+  end
+  -- the lower part first: if the game won't make it, nothing has changed
+  local newId = r.tm:RegisterTrailFromCurve(toGame(lower[1]))
+  if type(newId) ~= "number" or newId < 0 then return "The game wouldn't make the new trail." end
+  if #lower > 1 then r.tm:ReplaceTrailGeometry(newId, toGame(lower[1]), rest(lower)) end
+  if not r.tm:ReplaceTrailGeometry(chain.id, toGame(upper[1]), rest(upper)) then
+    r.tm:UnregisterTrail(newId)
+    return "The game wouldn't change this trail."
+  end
+  local name = freeName(chain.name .. " Lower")
+  pcall(function() r.tm:SetTrailDisplayName(newId, FText(name)) end)
+  if chain.diff and chain.diff ~= 255 then pcall(function() r.tm:SetTrailDifficulty(newId, chain.diff) end) end
+  if chain.groomed ~= nil then pcall(function() r.tm:SetTrailGroomed(newId, chain.groomed) end) end
+  if chain.night ~= nil then pcall(function() r.tm:SetTrailNightSkiing(newId, chain.night) end) end
+  if chain.disabled then pcall(function() r.tm:SetTrailDisabled(newId, true) end) end
+  -- the mod's pieces by the lower part go with it
+  local moved = 0
+  for _, pc in ipairs(pieces) do
+    if valid(pc.a) then
+      local l = pc.a:K2_GetActorLocation()
+      local at = { X = l.X, Y = l.Y, Z = l.Z }
+      local dUp = r.tm:GetDistanceToCorridor(at, chain.id)
+      local dLo = r.tm:GetDistanceToCorridor(at, newId)
+      if dLo < dUp then renamePiece(pc, name); moved = moved + 1 end
+    end
+  end
+  afterShapeChange(r)
+  log(string.format("split \"%s\" at %.0f m: lower part \"%s\" (#%d), %d pieces moved to it", chain.name, p.d / 100,
+    name, newId, moved))
+  M.lastShape = string.format("Split: the lower %d m is now \"%s\".%s", math.floor((p.length - p.d) / 100 + 0.5), name,
+    moved > 0 and string.format(" %d Better Trails piece%s went with it.", moved, moved == 1 and "" or "s") or "")
+  return nil
+end
+
+-- a chain the other way round: last curve first, each curve from its end to its start
+local function reversed(curves)
+  local out = {}
+  for i = #curves, 1, -1 do
+    local c = curves[i]
+    local tapered = c.w1 and c.w1 > 0
+    out[#out + 1] = { s = c.e, c = c.c, e = c.s, w0 = tapered and c.w1 or c.w0, w1 = tapered and c.w0 or 0 }
+  end
+  return out
+end
+
+-- How two trails fit together: the closest pair of ends (start or end of each: a trail can be drawn uphill), and
+-- the joined chain, running downhill. Returns nil when no two ends are close enough.
+local function fitTogether(me, o)
+  local ends = { s = function(t) return t.curves[1].s end, e = function(t) return t.curves[#t.curves].e end }
+  local best
+  for _, mine in ipairs({ "s", "e" }) do
+    for _, theirs in ipairs({ "s", "e" }) do
+      local a, b = ends[mine](me), ends[theirs](o)
+      local g = math.sqrt((a.X - b.X) ^ 2 + (a.Y - b.Y) ^ 2)
+      if not best or g < best.gap then best = { mine = mine, theirs = theirs, gap = g } end
+    end
+  end
+  local w = math.max(me.curves[1].w0, me.curves[#me.curves].w0, o.curves[1].w0, o.curves[#o.curves].w0, 1000)
+  local reach = math.min(CFG.JOIN_MAX, math.max(CFG.JOIN_GAP, 2 * w))
+  if best.gap > reach then return nil end
+  -- me as it is; the other trail turned to meet it
+  local first, second, firstIsMe
+  if best.mine == "e" then
+    first, second, firstIsMe = me.curves, (best.theirs == "s") and o.curves or reversed(o.curves), true
+  else
+    first, second, firstIsMe = (best.theirs == "e") and o.curves or reversed(o.curves), me.curves, false
+  end
+  -- One bend point where they meet: both ends move to the point halfway between them (copies: the trails' own
+  -- curves stay as they are until the join goes through). No extra piece, so no second point next to the first.
+  local chain = {}
+  for _, c in ipairs(first) do chain[#chain + 1] = c end
+  for _, c in ipairs(second) do chain[#chain + 1] = c end
+  local k = #first
+  local a, b = chain[k], chain[k + 1]
+  local m = lerp3(a.e, b.s, 0.5)
+  chain[k] = { s = a.s, c = a.c, e = m, w0 = a.w0, w1 = a.w1 }
+  chain[k + 1] = { s = m, c = b.c, e = b.e, w0 = b.w0, w1 = b.w1 }
+  -- Different widths: the two curves either side of the joint taper (the game widens a curve evenly from
+  -- CorridorWidth to EndCorridorWidth), meeting halfway between the two widths, so there's no step.
+  local wa, wb = widthAt(a, 1), widthAt(b, 0)
+  if math.abs(wa - wb) > 100 then
+    local mid = (wa + wb) / 2
+    chain[k].w0, chain[k].w1 = widthAt(a, 0), mid
+    chain[k + 1].w0, chain[k + 1].w1 = mid, widthAt(b, 1)
+  end
+  -- downhill: the top of the joined trail first
+  if chain[1].s.Z < chain[#chain].e.Z then chain = reversed(chain); firstIsMe = not firstIsMe end
+  return { chain = chain, gap = best.gap, meOnTop = firstIsMe }
+end
+
+-- trails that can join this one: any trail with an end near one of this trail's ends
+function M.joinCandidates(trail)
+  local r = refs()
+  local list = {}
+  if not valid(r.tm) then return list end
+  local me = readChain(r.tm, trail.id)
+  if not me or me.shape == 1 then return list end
+  for _, t in ipairs(readTrails()) do
+    if t.id ~= trail.id and t.shape ~= 1 then
+      local o = readChain(r.tm, t.id)
+      local fit = o and fitTogether(me, o)
+      if fit then list[#list + 1] = { other = o, below = fit.meOnTop, gap = fit.gap } end
+    end
+  end
+  table.sort(list, function(a, b) return a.gap < b.gap end)
+  return list
+end
+
+-- join `cand.other` into `trail`: one chain, top to bottom. This trail keeps its id (its panel stays open), and the
+-- joined trail takes the upper trail's name and settings
+function M.join(trail, cand)
+  if M.job then return "Still busy with the last change." end
+  local r = refs(true)
+  if not ready(r) then return "The resort isn't loaded." end
+  local me, o = readChain(r.tm, trail.id), readChain(r.tm, cand.other.id)
+  if not (me and o) then return "One of the trails is gone: try again." end
+  local fit = fitTogether(me, o)
+  if not fit then return "The trails' ends are too far apart now: try again." end
+  local chain = fit.chain
+  local top, bottom = me, o
+  if not fit.meOnTop then top, bottom = o, me end
+  local pieces = piecesOf(M.trailById(o.id) or { id = o.id, name = o.name })
+  if top == o then                                 -- the name goes too: this trail's own pieces are renamed
+    for _, pc in ipairs(piecesOf(M.trailById(me.id) or { id = me.id, name = me.name })) do pieces[#pieces + 1] = pc end
+  end
+  local more = {}
+  for i = 2, #chain do more[#more + 1] = toGame(chain[i]) end
+  if not r.tm:ReplaceTrailGeometry(me.id, toGame(chain[1]), more) then return "The game wouldn't change this trail." end
+  r.tm:UnregisterTrail(o.id)
+  if top == o then                                 -- the upper trail's name and settings
+    pcall(function() r.tm:SetTrailDisplayName(me.id, FText(o.name)) end)
+    if o.diff and o.diff ~= 255 then pcall(function() r.tm:SetTrailDifficulty(me.id, o.diff) end) end
+    if o.groomed ~= nil then pcall(function() r.tm:SetTrailGroomed(me.id, o.groomed) end) end
+    if o.night ~= nil then pcall(function() r.tm:SetTrailNightSkiing(me.id, o.night) end) end
+    if o.disabled ~= nil then pcall(function() r.tm:SetTrailDisabled(me.id, o.disabled) end) end
+  end
+  local keptName = top.name
+  for _, pc in ipairs(pieces) do if valid(pc.a) then renamePiece(pc, keptName) end end
+  afterShapeChange(r)
+  log(string.format("joined \"%s\" (#%d) and \"%s\" (#%d) as \"%s\" (ends %.1f m apart), %d pieces renamed", me.name,
+    me.id, o.name, o.id, keptName, fit.gap / 100, #pieces))
+  M.lastShape = string.format("Joined: \"%s\" and \"%s\" are now one trail, \"%s\".", top.name, bottom.name, keptName)
+  return nil
+end
+
 -- Preview of a custom tower layout: Tower Lights spawned in the game's own preview mode (bIsPreview, then
 -- SetPreviewMode: the see-through look of the build menu's ghost), which the game doesn't register, charge or save.
 -- A few a frame. If the first one ever turns up among the resort's buildings, previews are switched off for good.
@@ -2201,9 +2526,10 @@ local function buildColorBox(tree, parent, title)
   parent:AddChildToVerticalBox(cb.box):SetPadding({ Left = 0, Top = 8, Right = 0, Bottom = 0 })
   cb.titleText = newText(tree, title, SIZE.button, C.text, true)
   cb.box:AddChildToVerticalBox(cb.titleText):SetPadding({ Left = 2, Top = 0, Right = 2, Bottom = 3 })
-  local sw = newRow(tree, cb.box)
+  local swRows = { newRow(tree, cb.box), newRow(tree, cb.box) }   -- 8 swatches: two rows of four
   cb.swatches = {}
-  for _, pr in ipairs(PRESETS) do
+  for si, pr in ipairs(PRESETS) do
+    local sw = swRows[si <= math.ceil(#PRESETS / 2) and 1 or 2]
     local c = newButton(tree, sw, " ", 1, function()
       pickColor(cb, pr.hex, true)
       cb.open = false
@@ -2375,7 +2701,9 @@ local function buildFeatureTab(tree, box, f)
   for _, op in ipairs(f.options) do
     local row = newRow(tree, box)
     U.opt[op.id] = {}
-    for _, ch in ipairs(op.choices) do
+    local perRow = (#op.choices >= 4) and math.ceil(#op.choices / 2) or #op.choices   -- 4 choices: two rows of two
+    for ci, ch in ipairs(op.choices) do
+      if ci > 1 and (ci - 1) % perRow == 0 then row = newRow(tree, box) end
       U.opt[op.id][ch] = newButton(tree, row, op.labels[ch], 1, function()
         if P.trail then optsFor(f, P.trail)[op.id] = ch end
         refreshTab()
@@ -2415,8 +2743,61 @@ local function buildFeatureTab(tree, box, f)
   return U
 end
 
-local TABS = { "tower", "rope", "snow", "sign", "flag" }
-local TAB_LABEL = { tower = "Towers", rope = "Ropes", snow = "Snow", sign = "Signs", flag = "Flags" }
+-- the Shape tab: split this trail in two, or join a trail that continues it
+local function buildShapeTab(tree, box)
+  local S = {}
+  S.splitTitle = newText(tree, "Split", SIZE.button, C.text, true)
+  box:AddChildToVerticalBox(S.splitTitle):SetPadding({ Left = 2, Top = 0, Right = 2, Bottom = 2 })
+  S.slider = newSlider(tree, box, "Split at")
+  local actions = newRow(tree, box)
+  S.splitBtn = newButton(tree, actions, "Split here", 3, function()
+    if not S.plan or S.plan.err then return end
+    if not S.confirmAt or frame - S.confirmAt > 240 then
+      S.confirmAt = frame
+      setButton(S.splitBtn, "Click again to split", C.red, true)
+      return
+    end
+    S.confirmAt = nil
+    M.clearGhosts()
+    local msg = M.split(S.plan)
+    P.msg = msg
+    P.key = nil
+  end)
+  S.preview = newButton(tree, actions, "Preview", 1, function()
+    P.previewOn.shape = not P.previewOn.shape
+    if not P.previewOn.shape then M.clearGhosts() end
+    refreshTab()
+  end)
+  S.note = newNote(tree, box)
+  S.joinTitle = newText(tree, "Join", SIZE.button, C.text, true)
+  box:AddChildToVerticalBox(S.joinTitle):SetPadding({ Left = 2, Top = 8, Right = 2, Bottom = 2 })
+  S.joinBtns = {}
+  for i = 1, 3 do
+    local row = newRow(tree, box)
+    local c
+    c = newButton(tree, row, "Join", 1, function()
+      local cand = S.cands and S.cands[i]
+      if not (cand and P.trail) then return end
+      if S.joinConfirm ~= i or frame - (S.joinAt or 0) > 240 then
+        S.joinConfirm, S.joinAt = i, frame
+        setButton(c, "Click again to join \"" .. cand.other.name .. "\"", C.red, true)
+        return
+      end
+      S.joinConfirm = nil
+      local msg = M.join(P.trail, cand)
+      P.msg = msg
+      P.key = nil
+    end)
+    S.joinBtns[i] = c
+  end
+  S.joinNote = newNote(tree, box)
+  return S
+end
+
+P.shapeOpts = P.shapeOpts or {}
+
+local TABS = { "tower", "rope", "snow", "sign", "flag", "shape" }
+local TAB_LABEL = { tower = "Towers", rope = "Ropes", snow = "Snow", sign = "Signs", flag = "Flags", shape = "Shape" }
 
 local function inject(w)
   local tree = w.WidgetTree
@@ -2431,9 +2812,11 @@ local function inject(w)
   local title = newText(tree, "Better Trails", SIZE.title, C.text, true)
   root:AddChildToVerticalBox(title):SetPadding({ Left = 2, Top = 0, Right = 2, Bottom = 3 })
 
-  local tabs = newRow(tree, root, 6)
+  -- the tabs in two rows of three
+  local tabRows = { newRow(tree, root, 2), newRow(tree, root, 6) }
   P.tabButtons = {}
-  for _, key in ipairs(TABS) do
+  for i, key in ipairs(TABS) do
+    local tabs = tabRows[i <= math.ceil(#TABS / 2) and 1 or 2]
     P.tabButtons[key] = newButton(tree, tabs, TAB_LABEL[key], 1, function()
       P.tab = key
       refreshTab()
@@ -2449,6 +2832,7 @@ local function inject(w)
   buildTowerTab(tree, P.boxes.tower)
   P.F = {}
   for _, key in ipairs(FEATURE_ORDER) do P.F[key] = buildFeatureTab(tree, P.boxes[key], FEATURES[key]) end
+  P.S = buildShapeTab(tree, P.boxes.shape)
 
   -- everything on this trail, and one button to sell it all back (a second click confirms)
   P.allBox = newWidget(tree, "VerticalBox")
@@ -2515,6 +2899,14 @@ local function disableAll(msg, color)
     U.remove.w:SetVisibility(1)
     U.plan = nil
     setNote(U.note, msg, color)
+  end
+  if P.S then
+    P.S.plan, P.S.cands = nil, nil
+    setButton(P.S.splitBtn, "Split here", C.off, false)
+    setButton(P.S.preview, "Preview", C.off, false)
+    for _, c in ipairs(P.S.joinBtns) do c.w:SetVisibility(1) end
+    setNote(P.S.note, msg, color)
+    setNote(P.S.joinNote, "")
   end
 end
 
@@ -2757,6 +3149,83 @@ local function featureRefresh(U)
   if U.cb then refreshColorBox(U.cb, p.ours) end
 end
 
+local function shapeRefresh()
+  local S, t = P.S, P.trail
+  local o = P.shapeOpts[t.id] or { at = 0.5 }
+  P.shapeOpts[t.id] = o
+  local p = M.planSplit(t, nil)
+  local L = p.length or 0
+  local d = (p.err or L <= 0) and 0 or (CFG.MIN_PART + o.at * math.max(0, L - 2 * CFG.MIN_PART))
+  if not p.err then p = M.planSplit(t, d) end
+  S.plan = p
+  S.confirmAt = nil
+  if not S.sliding then
+    S.slider.w:SetValue(o.at); S.slider.last = S.slider.w:GetValue()
+  end
+  local done = M.lastShape
+  M.lastShape = nil
+  if p.err then
+    S.slider.val:SetText(FText(""))
+    setButton(S.splitBtn, "Split here", C.off, false)
+    setButton(S.preview, "Preview", C.off, false)
+    setNote(S.note, p.err, C.warn)
+    M.clearGhosts()
+  else
+    S.slider.val:SetText(FText(string.format("%d m", math.floor(p.d / 100 + 0.5))))
+    setButton(S.splitBtn, "Split here (free)", C.on, true)
+    setButton(S.preview, P.previewOn.shape and "Preview: on" or "Preview", P.previewOn.shape and C.on or C.off, true)
+    setNote(S.note, string.format("The top %d m stays \"%s\" (its name, settings and stats). The lower %d m becomes a "
+      .. "new trail, \"%s\", with the same difficulty, grooming and night skiing. Better Trails pieces on the lower "
+      .. "part go with it.", math.floor(p.d / 100 + 0.5), t.name, math.floor((L - p.d) / 100 + 0.5), p.lowerName))
+    if P.previewOn.shape and not M.noGhostKind.flag then
+      M.showGhosts(p.marks, string.format("shape:%d:%.0f:%.0f", t.id, p.marks[1].x, p.marks[1].y))
+      S.note:SetText(FText(S.note:GetText():ToString() .. " The two see-through flags mark the cut."))
+    else
+      M.clearGhosts()
+    end
+  end
+  -- joining
+  local cands = M.joinCandidates(t)
+  S.cands = cands
+  S.joinConfirm = nil
+  for i, c in ipairs(S.joinBtns) do
+    local cand = cands[i]
+    c.w:SetVisibility(cand and 0 or 1)
+    if cand then
+      setButton(c, string.format("Join \"%s\" (%s)", cand.other.name, cand.below and "below" or "above"), C.on, true)
+    end
+  end
+  if #cands == 0 then
+    setNote(S.joinNote, "No other trail has an end within 50 m of this trail's ends. Draw trails end to end "
+      .. "(either way round) to join them.")
+  else
+    setNote(S.joinNote, string.format("Joining makes one trail, top to bottom, with the upper trail's name, difficulty, "
+      .. "grooming and night skiing. The other name is gone; Better Trails pieces on both come along. Free."))
+  end
+  if done then setNote(S.note, done, C.ok) end
+  if P.msg then setNote(S.note, P.msg, C.warn); P.msg = nil end
+end
+
+-- the Split at slider: the spot shown while dragging, the plan (and preview) redone once let go
+local function pollShapeSlider()
+  local S = P.S
+  if not (S and P.trail and S.plan and not S.plan.err) then return end
+  local v = S.slider.w:GetValue()
+  if S.slider.last == nil then S.slider.last = v end
+  local L = S.plan.length
+  if math.abs(v - S.slider.last) > 0.001 then
+    S.slider.last = v
+    S.sliding = frame
+    local d = CFG.MIN_PART + v * math.max(0, L - 2 * CFG.MIN_PART)
+    S.slider.val:SetText(FText(string.format("%d m", math.floor(d / 100 + 0.5))))
+  end
+  if S.sliding and frame - S.sliding > 20 then
+    S.sliding = nil
+    P.shapeOpts[P.trail.id] = { at = S.slider.last }
+    refreshTab()
+  end
+end
+
 -- shows the picked tab and plans what it would do
 refreshTab = function()
   for _, key in ipairs(TABS) do
@@ -2764,7 +3233,9 @@ refreshTab = function()
     setButton(P.tabButtons[key], nil, key == P.tab and C.on or C.off, true)
   end
   if not (P.base and P.trail) then M.clearGhosts() return end
-  if P.tab == "tower" then towerRefresh() else featureRefresh(P.F[P.tab]) end
+  if P.tab == "tower" then towerRefresh()
+  elseif P.tab == "shape" then shapeRefresh()
+  else featureRefresh(P.F[P.tab]) end
 end
 
 -- remeasure = true: the trail changed (or another one is shown)
@@ -2857,11 +3328,12 @@ end
 local function pollSliders()
   if P.tab == "tower" then pollColorSliders(P.towerCB); pollTowerSliders()
   elseif P.tab == "rope" then pollColorSliders(P.F.rope.cb)
-  elseif P.tab == "snow" then pollRangeSliders(P.F.snow) end
+  elseif P.tab == "snow" then pollRangeSliders(P.F.snow)
+  elseif P.tab == "shape" then pollShapeSlider() end
 end
 
 local function sliding()
-  return P.towerSlideAt or (P.towerCB and P.towerCB.slideAt) or (P.F and P.F.rope and P.F.rope.cb and P.F.rope.cb.slideAt)
+  return P.towerSlideAt or (P.S and P.S.sliding) or (P.towerCB and P.towerCB.slideAt) or (P.F and P.F.rope and P.F.rope.cb and P.F.rope.cb.slideAt)
 end
 
 function M.poll()                                  -- every frame: a click lasts one frame
