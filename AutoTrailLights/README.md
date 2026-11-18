@@ -92,7 +92,7 @@ The Mod Manager can switch the mod off and on while the game is running. Pieces 
   edge when a spot is taken. Trees under a tower light, a snowblower or an edge string are cleared, and the clearing
   is charged the way the game charges it.
 - Snowblowers are expensive ($6,200 each plus their running cost). The tab shows the total before you click.
-- Tested with game build CL7918 (2026-11-16) on Z's Mod Loader 1.3.
+- Tested with game build CL7957 (2026-11-17) on Z's Mod Loader 1.3.
 
 ## Credits
 

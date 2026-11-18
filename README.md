@@ -32,7 +32,7 @@ Also:
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
 2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails, and your lights carry over.
    Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
-   - To install by hand instead, download `BetterTrails-2.3.0.zip` from the
+   - To install by hand instead, download `BetterTrails-2.3.1.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
      [`AutoTrailLights`](AutoTrailLights) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
      **Mods → Installed**. It replaces the old Auto Trail Lights folder.
@@ -59,7 +59,7 @@ The script is all in [`AutoTrailLights/Scripts/main.lua`](AutoTrailLights/Script
 
 ## Compatibility
 
-- Tested with game build CL7918 on Z's Mod Loader 1.3.
+- Tested with game build CL7957 on Z's Mod Loader 1.3.
 - Auto Trail Lights 2.0: replaces the old version (same mod Id `auto-trail-lights` and folder `AutoTrailLights`).
 - Single-player game; the mod contains no game files.
 
