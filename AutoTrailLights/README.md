@@ -11,7 +11,7 @@ Auto Trail Lights in the Mod Manager, and the lights you placed with Auto Trail 
 ## What it does
 
 Click a trail and open its **Edit** tab. Under the Night skiing switch there's a **Better Trails** section with six
-tabs, in two rows: **Towers**, **Ropes**, **Snow**, **Signs**, **Flags** and **Shape**. On the first five, pick the
+tabs, in two rows: **Towers**, **Ropes**, **Snow**, **Signs**, **Flags** and **Combine/Split**. On the first five, pick the
 options, then click **Install**.
 **Remove** sells that tab's pieces back for a refund. If you pick other options later, the button reads **Switch** and
 replaces the old pieces in one go.
@@ -54,7 +54,7 @@ install, switch Preview off, or close the panel.
   - Rate the trail's difficulty first. If you change it later, the tab offers **Update signs**, which is free.
 - **Flags**: the game's Flags along both edges wherever the trail is steeper than 25°, 30° or 35°, every 20 or 40 m.
   If no part is that steep, the tab says how steep the steepest part is.
-- **Shape**: split this trail, or join it with another one. Both are free and use the game's own trail tools, so
+- **Combine/Split**: split this trail, or join it with another one. Both are free and use the game's own trail tools, so
   the trails stay ordinary trails.
   - **Split**: drag **Split at** (each part keeps at least 30 m), then click **Split here** twice. **Preview** puts
     two see-through flags across the trail at the cut. The top part keeps the trail's name, settings and stats. The

@@ -17,7 +17,7 @@ Open a trail's panel and go to the **Edit** tab. The **Better Trails** section h
 - **Signs:** difficulty signs in the style your game uses (North American, Alpine, Japanese or French & Nordic), at
   the entrance and on the way down, plus junction signs wherever another trail joins or splits off.
 - **Flags:** flags along both edges of every stretch steeper than 25°, 30° or 35°.
-- **Shape (new in 3.0):** split a trail in two at a spot you pick (with a see-through preview of the cut), or join
+- **Combine/Split (new in 3.0):** split a trail in two at a spot you pick (with a see-through preview of the cut), or join
   two trails whose ends meet, whichever way they were drawn. The joined trail runs downhill, keeps the upper trail's
   name and settings, has one bend point at the joint, and tapers between different widths. Better Trails pieces
   follow their part of the trail.
@@ -36,7 +36,7 @@ Also:
 1. Install [Z's Mod Loader](https://mods.bigz.studio/) with its installer, then open **Ski-E-O Mod Manager**.
 2. If you have **Auto Trail Lights**, update it: version 2.0 is Better Trails, and your lights carry over.
    Otherwise, find **Auto Trail Lights** under **Discover** and install it. The update is listed once it's approved.
-   - To install by hand instead, download `BetterTrails-3.0.0.zip` from the
+   - To install by hand instead, download `BetterTrails-3.0.1.zip` from the
      [latest release](https://github.com/hpruitt99/Better-Trails/releases/latest), copy its
      [`AutoTrailLights`](AutoTrailLights) folder into the game's `mods` folder (`skieogame\mods\`), turn it on under
      **Mods → Installed**. It replaces the old Auto Trail Lights folder.

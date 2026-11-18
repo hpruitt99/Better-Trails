@@ -24,7 +24,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "3.0.0"
+M.VERSION = "3.0.1"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {
@@ -2797,7 +2797,7 @@ end
 P.shapeOpts = P.shapeOpts or {}
 
 local TABS = { "tower", "rope", "snow", "sign", "flag", "shape" }
-local TAB_LABEL = { tower = "Towers", rope = "Ropes", snow = "Snow", sign = "Signs", flag = "Flags", shape = "Shape" }
+local TAB_LABEL = { tower = "Towers", rope = "Ropes", snow = "Snow", sign = "Signs", flag = "Flags", shape = "Combine/Split" }
 
 local function inject(w)
   local tree = w.WidgetTree
