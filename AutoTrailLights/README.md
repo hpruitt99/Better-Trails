@@ -14,6 +14,10 @@ tabs: **Towers**, **Ropes**, **Snow**, **Signs** and **Flags**. On each tab, pic
 **Remove** sells that tab's pieces back for a refund. If you pick other options later, the button reads **Switch** and
 replaces the old pieces in one go.
 
+**Preview** on the Ropes, Snow, Signs and Flags tabs shows see-through pieces (the game's own placement preview)
+where the plan puts them, before you spend anything. They follow your option changes and disappear when you
+install, switch Preview off, or close the panel.
+
 - **Tower lights**: the game's Tower Light along both edges, spaced so the whole trail is lit, and Night skiing
   turned on.
   - **Uniform** pairs face each other across the trail. **Jagged** is a zipper: each light faces a gap.
@@ -50,7 +54,8 @@ replaces the old pieces in one go.
   If no part is that steep, the tab says how steep the steepest part is.
 - **Lit now**: the Towers and Ropes tabs say how much of the trail is in reach of a light, counting every light in
   the resort the way the game does, including ones you placed by hand.
-- **Remove everything**: under the tabs, a summary of what Better Trails placed on this trail. **Remove everything**
+- **Remove everything**: under the tabs, a summary of what Better Trails placed on this trail, what it cost, and what
+  its snowblowers cost to run. **Remove everything**
   sells it all back (click twice: the first click asks).
 
 The mod only ever touches what it placed. Pieces are named after their trail: "*Trail* Light #*n*", "*Trail* Rope

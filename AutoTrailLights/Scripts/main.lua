@@ -24,7 +24,7 @@
 local TAG = "[BetterTrails] "
 local M = rawget(_G, "BETTER_TRAILS") or {}          -- the same table if this file runs again: no second loops
 _G.BETTER_TRAILS = M
-M.VERSION = "2.2.0"
+M.VERSION = "2.3.0"
 M.stopped = false                                  -- this file running means the mod is on (see live switching below)
 
 local CFG = {
@@ -1828,6 +1828,7 @@ function M.applyFeature(p)
   if p.err then return p.err end
   if p.same then return "Already installed." end
   local f, t = p.f, p.b.trail
+  M.clearGhosts()
   if p.restyle then
     local n = 0
     for _, sp in ipairs(p.items) do
@@ -1895,11 +1896,11 @@ function M.showGhosts(spots, key)
   M.ghostQueue = { spots = spots, i = 1 }
 end
 
-local function isBuilding(r, a)
+local function isBuilding(r, a, k)
   local found = false
   pcall(function()
     local addr = a:GetAddress()
-    local arr = r.reg.Buildings
+    local arr = (k == "snow") and r.reg.Snowblowers or r.reg.Buildings
     for i = 1, #arr do
       local b = arr[i]
       if b and b:GetAddress() == addr then found = true; break end
@@ -1908,42 +1909,53 @@ local function isBuilding(r, a)
   return found
 end
 
+M.noGhostKind = M.noGhostKind or {}
 function M.stepGhosts()
   local q = M.ghostQueue
   if not q then return end
   local r = refs()
   if not ready(r) then M.ghostQueue = nil return end
-  local cls = q.cls
-  if not valid(cls) then
-    local c, why = loadStep(r, q, "tower")
-    if c == false then log("preview: " .. tostring(why)); M.ghostQueue = nil; return end
-    if not c then return end
-    cls = c
-    q.cls = c
-  end
+  q.cls, q.checked = q.cls or {}, q.checked or {}
   for _ = 1, 8 do
     local sp = q.spots[q.i]
     if not sp then M.ghostQueue = nil; return end
-    q.i = q.i + 1
-    local z = r.TU:GetHeightAtLocation(r.world, { X = sp.x, Y = sp.y })
-    local h = math.rad(sp.yaw) / 2
-    local xf = { Rotation = { X = 0, Y = 0, Z = math.sin(h), W = math.cos(h) }, Translation = { X = sp.x, Y = sp.y, Z = z },
-                 Scale3D = { X = 1, Y = 1, Z = 1 } }
-    local a = r.GS:BeginDeferredActorSpawnFromClass(r.world, cls, xf, 1, nil, 0)
-    if valid(a) then
-      pcall(function() a.bIsPreview = true end)
-      a = r.GS:FinishSpawningActor(a, xf, 0)
-    end
-    if valid(a) then
-      pcall(function() a:K2_SetActorRotation({ Pitch = 0, Yaw = sp.yaw, Roll = 0 }, false) end)
-      pcall(function() a:SetPreviewMode(true, true) end)
-      M.ghosts[#M.ghosts + 1] = a
-      pcall(function() M.ghostSet[a:GetFullName()] = true end)
-      if #M.ghosts == 1 and isBuilding(r, a) then   -- the game took it for a real one: no previews
-        log("preview towers count as buildings here: previews off")
-        M.noGhosts = true
-        M.clearGhosts()
-        return
+    local k = sp.k or "tower"
+    if M.noGhostKind[k] then q.i = q.i + 1 else
+      local cls = q.cls[k]
+      if not valid(cls) then
+        local c, why = loadStep(r, q, k)
+        if c == false then log("preview: " .. tostring(why)); M.ghostQueue = nil; return end
+        if not c then return end                   -- loading: next frame
+        cls = c
+        q.cls[k] = c
+      end
+      q.i = q.i + 1
+      local z = r.TU:GetHeightAtLocation(r.world, { X = sp.x, Y = sp.y })
+      local h = math.rad(sp.yaw) / 2
+      local xf = { Rotation = { X = 0, Y = 0, Z = math.sin(h), W = math.cos(h) }, Translation = { X = sp.x, Y = sp.y, Z = z },
+                   Scale3D = { X = 1, Y = 1, Z = 1 } }
+      local a = r.GS:BeginDeferredActorSpawnFromClass(r.world, cls, xf, 1, nil, 0)
+      if valid(a) then
+        pcall(function() a.bIsPreview = true end)
+        a = r.GS:FinishSpawningActor(a, xf, 0)
+      end
+      if valid(a) then
+        pcall(function() a:K2_SetActorRotation({ Pitch = 0, Yaw = sp.yaw, Roll = 0 }, false) end)
+        if sp.variant then pcall(function() a:ApplyVariant(FName(sp.variant)) end) end
+        if KINDS[k].noShadow then noShadows(a) end
+        pcall(function() a:SetPreviewMode(true, true) end)
+        M.ghosts[#M.ghosts + 1] = a
+        pcall(function() M.ghostSet[a:GetFullName()] = true end)
+        if not q.checked[k] then                   -- the game took a ghost for a real one: no previews of this kind
+          q.checked[k] = true
+          if isBuilding(r, a, k) then
+            log("preview " .. k .. " counts as a building here: previews of it off")
+            M.noGhostKind[k] = true
+            if k == "tower" then M.noGhosts = true end
+            M.clearGhosts()
+            return
+          end
+        end
       end
     end
   end
@@ -2106,6 +2118,7 @@ P.styleOf = P.styleOf or {}                        -- trail id -> the tower styl
 P.opts = P.opts or {}                              -- feature -> trail id -> its options picked in the panel
 P.signStyle = P.signStyle or 0                     -- 0: follow the game; 1-4: a sign style picked in the panel
 P.tab = P.tab or "tower"
+P.previewOn = P.previewOn or {}                    -- feature -> Preview switched on (this session)
 
 local function newWidget(tree, cn) return StaticConstructObject(StaticFindObject("/Script/UMG." .. cn), tree) end
 -- Text in the game's own UI font: the panel's labels use the game's default font (no font object set), so the mod
@@ -2387,6 +2400,11 @@ local function buildFeatureTab(tree, box, f)
     local msg = M.applyFeature(U.plan)
     if msg then P.msg = msg; P.key = nil end
   end)
+  U.preview = newButton(tree, actions, "Preview", 1, function()
+    P.previewOn[f.key] = not P.previewOn[f.key]
+    if not P.previewOn[f.key] then M.clearGhosts() end
+    refreshTab()
+  end)
   U.remove = newButton(tree, actions, "Remove", 1, function()
     if not P.trail then return end
     local msg = M.removeFeature(f, P.trail)
@@ -2492,6 +2510,7 @@ local function disableAll(msg, color)
     if U.styleBtn then setButton(U.styleBtn, nil, C.off, false) end
     if U.rangeBox then U.rangeBox:SetVisibility(1) end
     if U.cb then U.cb.box:SetVisibility(1) end
+    if U.preview then setButton(U.preview, "Preview", C.off, false) end
     setButton(U.main, U.f.verb, C.off, false)
     U.remove.w:SetVisibility(1)
     U.plan = nil
@@ -2528,8 +2547,20 @@ local function refreshSummary()
   end
   P.allBox:SetVisibility(total > 0 and 0 or 1)
   if total == 0 then return end
-  setNote(P.allNote, "On this trail: " .. table.concat(parts, ", ") .. ". Remove everything sells them back for "
-    .. money(refund) .. ".")
+  -- what it runs: snowblowers cost money a minute while they blow
+  local running = ""
+  local nSnow = #(all.snow or {})
+  if nSnow > 0 then
+    local perMin = 10
+    pcall(function()
+      local cdo = StaticFindObject(KINDS.snow.cdo)
+      if valid(cdo) and cdo.OperatingCostPerMinute > 0 then perMin = cdo.OperatingCostPerMinute end
+    end)
+    running = string.format(" Running: the snowblowers cost %s an hour while they blow (%s each).",
+      money(perMin * 60 * nSnow), money(perMin * 60))
+  end
+  setNote(P.allNote, "On this trail: " .. table.concat(parts, ", ") .. ". All of it cost " .. money(refund)
+    .. ", and Remove everything sells it back for that." .. running)
   P.confirmAt = nil
   setButton(P.allBtn, "Remove everything", C.red, true)
 end
@@ -2706,6 +2737,17 @@ local function featureRefresh(U)
     setButton(U.main, f.verb .. "  " .. money(p.net), C.on, true)
     setNote(U.note, "Places " .. describe(p) .. ".")
   end
+  -- the preview: see-through pieces where this plan puts them
+  local canPreview = not p.err and not p.same and n > 0 and not M.noGhostKind[p.k]
+  setButton(U.preview, P.previewOn[f.key] and "Preview: on" or "Preview", P.previewOn[f.key] and C.on or C.off, canPreview)
+  if P.previewOn[f.key] and canPreview then
+    local first = p.items[1]
+    M.showGhosts(p.items, string.format("%s:%d:%s:%d:%.0f:%.0f:%s", f.key, t.id, p.k, n, first.x, first.y,
+      tostring(first.variant)))
+    U.note:SetText(FText(U.note:GetText():ToString() .. " The see-through pieces show where they'll go."))
+  else
+    M.clearGhosts()
+  end
   if P.msg then setNote(U.note, P.msg, C.warn); P.msg = nil end
   if f.key == "rope" then
     local extra = litNote()
@@ -2722,7 +2764,7 @@ refreshTab = function()
     setButton(P.tabButtons[key], nil, key == P.tab and C.on or C.off, true)
   end
   if not (P.base and P.trail) then M.clearGhosts() return end
-  if P.tab == "tower" then towerRefresh() else M.clearGhosts(); featureRefresh(P.F[P.tab]) end
+  if P.tab == "tower" then towerRefresh() else featureRefresh(P.F[P.tab]) end
 end
 
 -- remeasure = true: the trail changed (or another one is shown)
